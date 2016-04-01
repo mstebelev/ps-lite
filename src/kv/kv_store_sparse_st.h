@@ -35,7 +35,13 @@ class KVStoreSparseST : public KVStore {
         }
         V* val_data = val.data() + start;
         Blob<V> pull(val_data, len);
-        handle_.Pull(key_i, data_[key_i], pull);
+        auto it = data_.find(key_i);
+        if (it != data_.end()) {
+            handle_.Pull(key_i, it->second, pull);
+        } else {
+            E v;
+            handle_.Pull(key_i, v, pull);
+        }
         if (pull.data != val_data) {
           while ((start + pull.size) > val.size()) val.resize(val.size()*2 + 5);
           memcpy(val.data()+start, pull.data, sizeof(V)*pull.size);
@@ -53,7 +59,13 @@ class KVStoreSparseST : public KVStore {
       for (size_t i = 0; i < n; ++i, val_data += k_) {
         K key_i = key[i];
         Blob<V> pull(val_data, k_);
-        handle_.Pull(key_i, data_[key_i], pull);
+        auto it = data_.find(key_i);
+        if (it != data_.end()) {
+            handle_.Pull(key_i, it->second, pull);
+        } else {
+            E v;
+            handle_.Pull(key_i, v, pull);
+        }
         CHECK_EQ(pull.size, (size_t)k_) << "use dyanmic pull";
         if (pull.data != val_data) {
           memcpy(val_data, pull.data, sizeof(V)*k_);
@@ -89,7 +101,15 @@ class KVStoreSparseST : public KVStore {
         K key_i = key[i];
         size_t k = val_size[i];
         if (k == 0) continue;
-        handle_.Push(key_i, Blob<const V>(val_data, k), data_[key_i]);
+        auto it = data_.find(key_i);
+        if (it != data_.end()) {
+            handle_.Push(key_i, Blob<const V>(val_data, k), it->second, false);
+        } else {
+            E v;
+            if (handle_.Push(key_i, Blob<const V>(val_data, k), v, true)) {
+                data_[key_i] = v;
+            }
+        }
         val_data += k;
       }
     } else if (!dyn && n) {
@@ -101,7 +121,15 @@ class KVStoreSparseST : public KVStore {
       V* val_data = val.data();
       for (size_t i = 0; i < n; ++i, val_data += k) {
         K key_i = key[i];
-        handle_.Push(key_i, Blob<const V>(val_data, k), data_[key_i]);
+        auto it = data_.find(key_i);
+        if (it != data_.end()) {
+            handle_.Push(key_i, Blob<const V>(val_data, k), it->second, false);
+        } else {
+            E v;
+            if (handle_.Push(key_i, Blob<const V>(val_data, k), v, true)) {
+                data_[key_i] = v;
+            }
+        }
       }
     }
 

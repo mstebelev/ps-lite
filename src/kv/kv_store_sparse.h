@@ -43,7 +43,13 @@ class KVStoreSparse : public KVStore {
         }
         V* val_data = val.data() + start;
         Blob<V> pull(val_data, len);
-        handle_.Pull(key_i, data_[0][key_i], pull);
+        auto it = data_[0].find(key_i);
+        if (it != data_[0].end()) {
+            handle_.Pull(key_i, it->second, pull);
+        } else {
+            E v;
+            handle_.Pull(key_i, v, pull);
+        }
         if (pull.data != val_data) {
           while ((start + pull.size) > val.size()) val.resize(val.size()*2 + 5);
           memcpy(val.data()+start, pull.data, sizeof(V)*pull.size);
@@ -96,7 +102,15 @@ class KVStoreSparse : public KVStore {
         K key_i = key[i];
         size_t k = val_size[i];
         if (k == 0) continue;
-        handle_.Push(key_i, Blob<const V>(val_data, k), data_[0][key_i]);
+        auto it = data_[0].find(key_i);
+        if (it != data_[0].end()) {
+            handle_.Push(key_i, Blob<const V>(val_data, k), it->second, false);
+        } else {
+            E v;
+            if (handle_.Push(key_i, Blob<const V>(val_data, k), v, true)) {
+                data_[0][key_i] = v;
+            }
+        }
         val_data += k;
       }
     } else if (!dyn && n) {
@@ -187,7 +201,15 @@ class KVStoreSparse : public KVStore {
     val += key_pos_[tid] * k;
     for (int i = key_pos_[tid]; i < key_pos_[tid+1]; ++i, val += k) {
       K key_i = key[i];
-      handle_.Push(key_i, Blob<const V>(val, k), data[key_i]);
+      auto it = data.find(key_i);
+      if (it != data.end()) {
+          handle_.Push(key_i, Blob<const V>(val, k), it->second, false);
+      } else {
+          E v;
+          if (handle_.Push(key_i, Blob<const V>(val, k), v, true)) {
+              data[key_i] = v;
+          }
+      }
     }
   }
 
@@ -197,7 +219,13 @@ class KVStoreSparse : public KVStore {
     for (int i = key_pos_[tid]; i < key_pos_[tid+1]; ++i, val += k) {
       K key_i = key[i];
       Blob<V> pull(val, k);
-      handle_.Pull(key_i, data[key_i], pull);
+      auto it = data.find(key_i);
+      if (it != data.end()) {
+          handle_.Pull(key_i, it->second, pull);
+      } else {
+          E v;
+          handle_.Pull(key_i, v, pull);
+      }
       CHECK_EQ(pull.size, (size_t)k) << "use dyanmic pull";
       if (pull.data != val) {
         memcpy(val, pull.data, sizeof(V)*k);

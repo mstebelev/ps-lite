@@ -313,13 +313,13 @@ void Van::Monitor() {
 
     //  Second frame in message contains event address. it's just the router's
     // address. no help
-    // zmq_msg_init(&msg);
-    // if (zmq_msg_recv(&msg, s, 0) == -1) {
-    //   if (errno == EINTR) continue;
-    //   break;
-    // }
-    // std::string address((char*)zmq_msg_data(&msg), zmq_msg_size(&msg));
-    // LOG(INFO) << event << " " << value << " " << address;
+    zmq_msg_init(&msg);
+    if (zmq_msg_recv(&msg, s, 0) == -1) {
+      if (errno == EINTR) continue;
+      break;
+    }
+    std::string address((char*)zmq_msg_data(&msg), zmq_msg_size(&msg));
+    LOG(INFO) << event << " " << value << " " << address;
 
     if (event == ZMQ_EVENT_DISCONNECTED) {
       auto& manager = Postoffice::instance().manager();
@@ -327,7 +327,7 @@ void Van::Monitor() {
 
         Lock l(fd_to_nodeid_mu_);
         if (fd_to_nodeid_.find(value) == fd_to_nodeid_.end()) {
-          manager.NodeDisconnected("JUST_A_UNKNOWN_NODE");
+          manager.NodeDisconnected("JUST_A_UNKNOWN_NODE " + address);
         } else {
           manager.NodeDisconnected(fd_to_nodeid_[value]);
         }
