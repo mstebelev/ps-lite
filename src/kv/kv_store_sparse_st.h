@@ -5,8 +5,8 @@ namespace ps {
 template<typename K, typename E, typename V, typename Handle>
 class KVStoreSparseST : public KVStore {
  public:
-  KVStoreSparseST(int id, Handle handle, int pull_val_len)
-      : KVStore(id), handle_(handle), k_(pull_val_len) {
+  KVStoreSparseST(int id, Handle handle, int pull_val_len, size_t max_table_size=0)
+      : KVStore(id), handle_(handle), k_(pull_val_len), max_table_size_(max_table_size) {
     CHECK_GT(k_, 0);
   }
 
@@ -132,9 +132,31 @@ class KVStoreSparseST : public KVStore {
         }
       }
     }
-
+    CleanupModel();
     FinishReceivedRequest(ts, msg->sender);
     handle_.Finish();
+  }
+
+
+
+  void CleanupModel() {
+      if (!max_table_size_ || data_.size() <= max_table_size_)
+          return;
+      typedef typename std::unordered_map<K, E>::const_iterator table_iterator_t;
+      std::vector<table_iterator_t> data_items;
+      data_items.reserve(data_.size());
+
+      for (auto it = data_.begin(); it != data_.end(); ++it) {
+          data_items.push_back(it);
+      }
+
+
+      auto middle = data_items.begin() + data_items.size() / 2;
+      std::nth_element(data_items.begin(), middle, data_items.end(), [](const table_iterator_t & a, const table_iterator_t & b) {return a->second < b->second;});
+      LOG(INFO) << "deleting " << middle - data_items.begin() << "elements from map";
+      for (auto it = data_items.begin(); it < middle; ++it) {
+          data_.erase(*it);
+      }
   }
 
   virtual void Load(dmlc::Stream *fi) {
@@ -162,5 +184,6 @@ class KVStoreSparseST : public KVStore {
   std::unordered_map<K, E> data_;
   Handle handle_;
   int k_;
+  size_t max_table_size_;
 };
 }  // namespace ps
