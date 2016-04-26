@@ -10,8 +10,8 @@ class KVStore : public Customer {
   virtual ~KVStore() { }
 
   // load and save
-  virtual void Load(dmlc::Stream *fi) = 0;
-  virtual void Save(dmlc::Stream *fo) const = 0;
+  virtual void Load(dmlc::Stream *fi, bool full_state_mode = false) = 0;
+  virtual void Save(dmlc::Stream *fo, bool full_state_mode = false) const = 0;
   virtual void Clear() = 0;
 
   // handle system call
