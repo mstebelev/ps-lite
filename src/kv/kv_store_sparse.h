@@ -132,12 +132,12 @@ class KVStoreSparse : public KVStore {
     handle_.Finish();
   }
 
-  virtual void Load(dmlc::Stream *fi) {
+  virtual void Load(dmlc::Stream *fi, bool full_state_mode) override {
     handle_.Load(fi);
     K key;
     while (true) {
       if (fi->Read(&key, sizeof(K)) != sizeof(K)) break;
-      GetValue(key).Load(fi);
+      GetValue(key).Load(fi, full_state_mode);
     }
     int size = 0;
     for (int i = 0; i < nt_; ++i) {
@@ -150,16 +150,16 @@ class KVStoreSparse : public KVStore {
     LOG(INFO) << "loaded " << size << " kv pairs in total";
   }
 
-  virtual void Save(dmlc::Stream *fo) const {
+  virtual void Save(dmlc::Stream *fo, bool full_state_mode) const override {
     handle_.Save(fo);
     int saved = 0;
 
     for (int i = 0; i < nt_; ++i) {
       int s = 0;
       for (const auto& it : data_[i]) {
-        if (it.second.Empty()) continue;
+        if (!full_state_mode && it.second.Empty()) continue;
         fo->Write(&it.first, sizeof(K));
-        it.second.Save(fo);
+        it.second.Save(fo, full_state_mode);
         ++ s;
       }
       LOG(INFO) << "bucket " << i << " [" <<
