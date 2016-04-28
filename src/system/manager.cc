@@ -7,6 +7,7 @@ DECLARE_int32(num_servers);
 DECLARE_int32(num_workers);
 DECLARE_int32(num_replicas);
 DECLARE_int32(report_interval);
+DEFINE_int32(predetermined_rank, -1, "hardcoded rank");
 
 DEFINE_int32(sync_timeout, 10, "connection timeout in sec.");
 
@@ -45,6 +46,9 @@ void Manager::Init(int argc, char *argv[]) {
   } else {
     // ask the scheduler to broadcast this node to others
     Task task = NewControlTask(Control::REGISTER_NODE);
+    if (FLAGS_predetermined_rank != -1) {
+      van_.my_node().set_rank(FLAGS_predetermined_rank);
+    }
     *task.mutable_ctrl()->add_node() = van_.my_node();
     SendTask(van_.scheduler(), task);
   }

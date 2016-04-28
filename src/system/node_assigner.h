@@ -1,4 +1,5 @@
 #pragma once
+#include <unordered_set>
 #include "base/common.h"
 #include "base/range.h"
 #include "proto/node.pb.h"
@@ -18,10 +19,10 @@ class NodeAssigner {
     Range<Key> kr = key_range_;
     int rank = 0;
     if (node->role() == Node::SERVER) {
-      kr = key_range_.EvenDivide(num_servers_, server_rank_);
-      rank = server_rank_ ++;
+      rank = GetRankForNode(node, server_ranks_);
+      kr = key_range_.EvenDivide(num_servers_, rank);
     } else if (node->role() == Node::WORKER) {
-      rank = worker_rank_ ++;
+      rank = GetRankForNode(node, worker_ranks_);
     }
     node->set_rank(rank);
     kr.To(node->mutable_key());
@@ -31,9 +32,28 @@ class NodeAssigner {
     // TODO...
   }
  protected:
+  int GetRankForNode(Node * node, std::unordered_set<int> & ranks) {
+    if (node->has_rank()) {
+      if (!ranks.insert(node->rank()).second) {
+        LOG(FATAL) << "Duplicate rank: " << node->rank();
+      }
+      return node->rank();
+    }
+    return GetNextRank(ranks);
+  }
+
+  int GetNextRank(std::unordered_set<int> & ranks) {
+    for (int i = 0; i < num_servers_; ++i) {
+      if (ranks.insert(i).second) {
+        return i;
+      }
+    }
+    LOG(FATAL) << "Too many nodes: " << num_servers_;
+  }
+
   int num_servers_ = 0;
-  int server_rank_ = 0;
-  int worker_rank_ = 0;
+  std::unordered_set<int> server_ranks_;
+  std::unordered_set<int> worker_ranks_;
   Range<Key> key_range_;
 };
 
