@@ -173,7 +173,7 @@ class OnlineServer {
           id, handle, pull_val_len, max_keys);
     } else {
       server_ = new KVStoreSparse<Key, Val, SyncV, Handle>(
-          id, handle, pull_val_len, num_threads);
+          id, handle, pull_val_len, num_threads, max_keys);
     }
     // server_ = new KVStoreCuckoo<Key, Val, SyncV, Handle>(
     //     id, handle, pull_val_len, num_threads);

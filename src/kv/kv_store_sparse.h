@@ -2,13 +2,14 @@
 #include "kv/kv_store.h"
 #include "base/thread_pool.h"
 #include "ps/node_info.h"
+#include <utility>
 namespace ps {
 
 template<typename K, typename E, typename V, typename Handle>
 class KVStoreSparse : public KVStore {
  public:
-  KVStoreSparse(int id, Handle handle, int pull_val_len, int nt)
-      : KVStore(id), handle_(handle), k_(pull_val_len), nt_(nt), pool_(nt) {
+  KVStoreSparse(int id, Handle handle, int pull_val_len, int nt, size_t max_table_size=0)
+      : KVStore(id), handle_(handle), k_(pull_val_len), nt_(nt), pool_(nt), max_table_size_(max_table_size) {
     CHECK_GT(k_, 0); CHECK_GT(nt_, 0); CHECK_LT(nt_, 30);
     data_.resize(nt_);
     auto kr = NodeInfo::KeyRange();
@@ -43,8 +44,9 @@ class KVStoreSparse : public KVStore {
         }
         V* val_data = val.data() + start;
         Blob<V> pull(val_data, len);
-        auto it = data_[0].find(key_i);
-        if (it != data_[0].end()) {
+        size_t bucket = GetBucket(key_i);
+        auto it = data_[bucket].find(key_i);
+        if (it != data_[bucket].end()) {
             handle_.Pull(key_i, it->second, pull);
         } else {
             E v;
@@ -102,13 +104,14 @@ class KVStoreSparse : public KVStore {
         K key_i = key[i];
         size_t k = val_size[i];
         if (k == 0) continue;
-        auto it = data_[0].find(key_i);
-        if (it != data_[0].end()) {
+        size_t bucket = GetBucket(key_i);
+        auto it = data_[bucket].find(key_i);
+        if (it != data_[bucket].end()) {
             handle_.Push(key_i, Blob<const V>(val_data, k), it->second, false);
         } else {
             E v;
             if (handle_.Push(key_i, Blob<const V>(val_data, k), v, true)) {
-                data_[0][key_i] = v;
+                data_[bucket][key_i] = v;
             }
         }
         val_data += k;
@@ -128,9 +131,40 @@ class KVStoreSparse : public KVStore {
       pool_.Wait();
     }
 
+    CleanupModel();
     FinishReceivedRequest(ts, msg->sender);
     handle_.Finish();
   }
+
+  void CleanupModel() {
+      if (!max_table_size_)
+          return;
+      size_t total_size = 0;
+      for (int i = 0; i < nt_; ++i) {
+          total_size += data_[i].size();
+      }
+      if (total_size <= max_table_size_)
+          return;
+
+      typedef typename std::pair<typename std::unordered_map<K, E>::const_iterator, size_t> table_iterator_t;
+      std::vector<table_iterator_t> data_items;
+      data_items.reserve(data_.size());
+
+      for (int i = 0; i < nt_; ++i) {
+          for (auto it = data_[i].begin(); it != data_[i].end(); ++it) {
+              data_items.push_back(std::make_pair(it, i));
+          }
+      }
+
+
+      auto middle = data_items.begin() + data_items.size() / 2;
+      std::nth_element(data_items.begin(), middle, data_items.end(), [](const table_iterator_t & a, const table_iterator_t & b) {return a.first->second < b.first->second;});
+      LOG(INFO) << "deleting " << middle - data_items.begin() << "elements from map";
+      for (auto it = data_items.begin(); it < middle; ++it) {
+          data_[it->second].erase(it->first);
+      }
+  }
+
 
   virtual void Load(dmlc::Stream *fi, bool full_state_mode) override {
     handle_.Load(fi);
@@ -179,6 +213,7 @@ class KVStoreSparse : public KVStore {
   K bucket_size_;
 
   ThreadPool pool_;
+  size_t max_table_size_;
 
   std::vector<int> key_pos_;
 
@@ -187,13 +222,17 @@ class KVStoreSparse : public KVStore {
     for (int i = 1; i < nt_; ++i) {
       K k = min_key_ + bucket_size_ * i;
       key_pos_[i] = std::lower_bound(key + key_pos_[i-1], key + n, k) - key;
-      LOG(ERROR) << key_pos_[i] - key_pos_[i-1];
+      //LOG(ERROR) << key_pos_[i] - key_pos_[i-1];
     }
     key_pos_[nt_] = n;
   }
 
+  size_t GetBucket(K key) {
+      return (key - min_key_) / bucket_size_;
+  }
+
   E& GetValue(K key) {
-    return data_[(key - min_key_) / bucket_size_][key];
+    return data_[GetBucket(key)][key];
   }
 
   void ThreadPush(K* key, V* val, int n, int k, int tid) {
