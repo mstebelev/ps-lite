@@ -13,6 +13,8 @@ class KVStoreSparse : public KVStore {
     CHECK_GT(k_, 0); CHECK_GT(nt_, 0); CHECK_LT(nt_, 30);
     data_.resize(nt_);
     auto kr = NodeInfo::KeyRange();
+
+    LOG(INFO) << "node key range [" << kr.begin() <<", " << kr.end() << ") kv pairs in total";
     min_key_ = kr.begin();
     bucket_size_ = (kr.end() - kr.begin() -1 ) / nt_ + 1;
     key_pos_.resize(nt_+1);

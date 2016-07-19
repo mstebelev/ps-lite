@@ -21,6 +21,8 @@ class NodeAssigner {
     if (node->role() == Node::SERVER) {
       rank = GetRankForNode(node, server_ranks_);
       kr = key_range_.EvenDivide(num_servers_, rank);
+
+      LOG(INFO) << "node " << rank << " key range [" << kr.begin() <<", " << kr.end() << ") num servers " << num_servers_;
     } else if (node->role() == Node::WORKER) {
       rank = GetRankForNode(node, worker_ranks_);
     }
